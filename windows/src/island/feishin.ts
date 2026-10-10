@@ -6,7 +6,6 @@ import { Bridge, onEvent } from "../core/bridge";
 import { pillDefinition } from "../core/pills";
 import { FEISHIN_ID, Feishin, type FeishinState, type FeishinTrack } from "../core/feishin";
 import { State } from "../core/state";
-import { t } from "../i18n/i18n";
 
 export interface FeishinHost {
   /** Compact island from hidden, no peek sound. */

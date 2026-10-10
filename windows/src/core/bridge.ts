@@ -8,6 +8,7 @@ import { getCurrentWebview } from "@tauri-apps/api/webview";
 import type { Settings } from "./state";
 import type { RecapHistory, RecapPrefs } from "../recap/summary";
 import type { SpotifyState } from "./spotify";
+import type { FeishinState } from "./feishin";
 
 export const IS_TAURI =
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -221,9 +222,21 @@ export const Bridge = {
   spotifyOpen: () => call<boolean>("spotify_open"),
   /** Whether there is a Spotify to launch (Settings). */
   spotifyInstalled: () => call<boolean>("spotify_installed"),
+
+  // ── Feishin (src-tauri/src/feishin.rs: Linux MPRIS, Windows WebSocket) ────
+  /** Reads the player again (the card came on screen) and reports it. */
+  feishinRefresh: () => call<FeishinState | null>("feishin_refresh"),
+  /** True when Feishin took it. `value`: seconds for seek, 0/1 for shuffle and repeat, 0…100 for volume. */
+  feishinControl: (action: FeishinAction, value?: number) =>
+    call<boolean>("feishin_control", { action, value: value ?? null }),
+  /** Brings Feishin forward or starts it; without it, its download page. */
+  feishinOpen: () => call<boolean>("feishin_open"),
+  /** Whether there is a Feishin to launch (Settings). */
+  feishinInstalled: () => call<boolean>("feishin_installed"),
 };
 
 export type SpotifyAction = "playPause" | "next" | "previous" | "seek" | "shuffle" | "repeat" | "volume";
+export type FeishinAction = "playPause" | "next" | "previous" | "seek" | "shuffle" | "repeat" | "volume";
 
 export type ShortcutStatus =
   | "active" | "off" | "inUse" | "duplicate" | "invalid"

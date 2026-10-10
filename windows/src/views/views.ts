@@ -23,6 +23,8 @@ import { buildRecap } from "./recap";
 import { buildWardrobe } from "./wardrobe";
 import { buildSpotifyCard, buildSpotifyPill, type SpotifyPillHost } from "./spotify";
 import { SPOTIFY_ID } from "../core/spotify";
+import { buildFeishinCard, buildFeishinPill, type FeishinPillHost } from "./feishin";
+import { FEISHIN_ID } from "../core/feishin";
 import type { Outfit, OutfitSelection } from "../mochi/wardrobe";
 import { language, t, tl, type Msg } from "../i18n/i18n";
 import type { ViewCommand } from "../island/shortcuts";
@@ -195,10 +197,12 @@ function buildOverview(actions: ViewActions): ViewHost {
   // Opened from a plan pill in the header: stands in for the left card.
   const plan = new PlanCard();
   let planTimer: number | null = null;
-  // Spotify's card and pill are kept and updated in place: the progress bar
+  // Spotify and Feishin cards and pills are kept and updated in place: the progress bar
   // runs on, and a slider being dragged must not be rebuilt under the pointer.
   const spotifyCard = buildSpotifyCard();
   let spotifyPill: SpotifyPillHost | null = null;
+  const feishinCard = buildFeishinCard();
+  let feishinPill: FeishinPillHost | null = null;
 
   const el = h("div", { class: "view overview" },
     h("div", { class: "left" }, left),
@@ -208,7 +212,7 @@ function buildOverview(actions: ViewActions): ViewHost {
   let pillIds = "";
   let detailOpen = false;
   let lastFocus: string | null = null;
-  let mode: "ticker" | "card" | "plan" | "diff" | "spotify" | null = null;
+  let mode: "ticker" | "card" | "plan" | "diff" | "spotify" | "feishin" | null = null;
   let cardKey = "";
   /** The list row highlighted at the last sync, to scroll only when it moves. */
   let shownSelection: number | null = null;
@@ -365,6 +369,15 @@ function buildOverview(actions: ViewActions): ViewHost {
           cardKey = "";
         }
         spotifyCard.sync();
+      } else if (task && task.id === FEISHIN_ID) {
+        // Feishin's own card for every state: playing, idle, not installed / not connected.
+        if (mode !== "feishin") {
+          clear(leftBody);
+          leftBody.append(feishinCard.el);
+          mode = "feishin";
+          cardKey = "";
+        }
+        feishinCard.sync();
       } else if (task) {
         const info = State.integrations[task.id];
         const key = [
@@ -395,10 +408,14 @@ function buildOverview(actions: ViewActions): ViewHost {
         pillIds = pillKey;
         clear(pills);
         spotifyPill = null;
+        feishinPill = null;
         for (const t of others) {
           if (t.id === SPOTIFY_ID) {
             spotifyPill = buildSpotifyPill(t, () => actions.setFocus(t.id));
             pills.append(spotifyPill.el);
+          } else if (t.id === FEISHIN_ID) {
+            feishinPill = buildFeishinPill(t, () => actions.setFocus(t.id));
+            pills.append(feishinPill.el);
           } else {
             pills.append(buildPill(t, actions));
           }
@@ -406,6 +423,7 @@ function buildOverview(actions: ViewActions): ViewHost {
         pruneMiniBots();
       }
       spotifyPill?.sync();
+      feishinPill?.sync();
     },
   };
 }

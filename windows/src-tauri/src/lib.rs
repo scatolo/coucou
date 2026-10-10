@@ -29,6 +29,7 @@ mod settings;
 mod shortcuts;
 mod sounds;
 mod spotify;
+mod feishin;
 mod tray;
 #[cfg(windows)]
 mod webview_drop;
@@ -112,6 +113,7 @@ fn save_settings(app: AppHandle, shared: State<Shared>, settings: Settings) {
     }
     integrations::settings_saved(&app, &settings.active_integrations);
     spotify::sync(&app, &settings.active_integrations);
+    feishin::sync(&app, &settings.active_integrations);
     if shortcuts_changed {
         shortcuts::apply(&app, &settings.shortcuts);
     }
@@ -739,6 +741,10 @@ pub fn run() {
             spotify::spotify_control,
             spotify::spotify_open,
             spotify::spotify_installed,
+            feishin::feishin_refresh,
+            feishin::feishin_control,
+            feishin::feishin_open,
+            feishin::feishin_installed,
         ])
         .setup(move |app| {
             let handle = app.handle().clone();
@@ -776,6 +782,7 @@ pub fn run() {
             pipe::start(handle.clone());
             integrations::start(handle.clone());
             spotify::sync(&handle, &loaded.active_integrations);
+            feishin::sync(&handle, &loaded.active_integrations);
             shortcuts::apply(&handle, &loaded.shortcuts);
             Ok(())
         })

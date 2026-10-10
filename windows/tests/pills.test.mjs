@@ -40,6 +40,7 @@ test("the catalog holds the Mac's pills, in the Mac's order, with the Mac's valu
     ["integration_stripe", "Stripe", "#0570DE", "service", "Integration"],
     ["integration_music", "Apple Music", "#FA2D48", "service", "Integration"],
     ["integration_spotify", "Spotify", "#1DB954", "service", "Integration"],
+    ["integration_feishin", "Feishin", "#3574FC", "service", "Integration"],
   ];
   assert.deepEqual(
     PILL_CATALOG.map((p) => [p.id, p.name, p.color, p.category, p.subtitle]),
@@ -82,7 +83,7 @@ test("this build leaves out what only macOS has, Claude Desktop on Linux and Spo
   }
   // Their plugins are written from Settings → Agents, and the chat talks to
   // every provider (port/chat-providers), on both systems.
-  for (const id of ["agent_opencode", "agent_amp", "agent_hermes", "ai_google", "ai_openai", "ai_ollama", "ai_lmstudio"]) {
+  for (const id of ["agent_opencode", "agent_amp", "agent_hermes", "ai_google", "ai_openai", "ai_ollama", "ai_lmstudio", "integration_feishin"]) {
     assert.ok(windows.includes(id), id);
     assert.ok(linux.includes(id), id);
   }
@@ -95,6 +96,17 @@ test("this build leaves out what only macOS has, Claude Desktop on Linux and Spo
     linux.filter((id) => id !== "integration_spotify"),
     windows.filter((id) => id !== "agent_claude-desktop"),
   );
+});
+
+test("Feishin: available on Linux and Windows with nothing to set up", () => {
+  const def = pillDefinition("integration_feishin");
+  assert.equal(def.support, "yes");
+  assert.deepEqual(def.connect, { kind: "none" });
+  assert.equal(def.category, "service");
+  assert.ok(!isComingSoon("integration_feishin"));
+  assert.ok(!isHookPill("integration_feishin"));
+  assert.ok(!mainPillChoices("linux").some((p) => p.id === "integration_feishin"));
+  assert.ok(!mainPillChoices("windows").some((p) => p.id === "integration_feishin"));
 });
 
 test("Spotify: a Linux-only service with nothing to set up", () => {

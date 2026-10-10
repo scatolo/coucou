@@ -853,6 +853,13 @@ function integrationsSection(present: Record<string, boolean>): HTMLElement {
         hint.textContent = ok === false ? t("Not installed") : "";
       });
     }
+    if (def.id === "integration_feishin") {
+      const hint = h("div", { class: "hint", style: "padding-top:5px" });
+      rows.append(hint);
+      void Bridge.feishinInstalled().then((ok) => {
+        hint.textContent = ok === false ? t("Not installed") : "";
+      });
+    }
 
     list.append(
       h("div", { style: "display:flex;gap:12px;align-items:flex-start" },

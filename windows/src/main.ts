@@ -10,6 +10,8 @@ import { registerIntegrationHandlers, refreshConfigured } from "./island/integra
 import { registerShortcutHandlers } from "./island/shortcuts";
 import { applySpotify, registerSpotifyHandlers } from "./island/spotify";
 import { SPOTIFY_ID } from "./core/spotify";
+import { applyFeishin, registerFeishinHandlers } from "./island/feishin";
+import { FEISHIN_ID } from "./core/feishin";
 import { Recap } from "./recap/recap";
 import { onLanguageChange, resolveLanguage, setLanguage, systemLanguages } from "./i18n/i18n";
 
@@ -104,6 +106,10 @@ async function main() {
   // Rust may have read Spotify before this page listened: ask once.
   if (State.settings.activeIntegrations.includes(SPOTIFY_ID)) {
     void Bridge.spotifyRefresh().then((s) => s && applySpotify(island, s));
+  }
+  registerFeishinHandlers(island);
+  if (State.settings.activeIntegrations.includes(FEISHIN_ID)) {
+    void Bridge.feishinRefresh().then((s) => s && applyFeishin(island, s));
   }
 
   // Monday recap: app start (greeting over), an agent starting work, waking up.

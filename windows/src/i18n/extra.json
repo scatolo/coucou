@@ -837,6 +837,17 @@
    "ru": "Ошибка",
    "id": "Galat"
   },
+  "Feishin not installed": {
+   "zh-Hans": "未安装 Feishin",
+   "hi": "Feishin इंस्टॉल नहीं है",
+   "es": "Feishin no está instalado",
+   "ar": "Feishin غير مثبت",
+   "fr": "Feishin n'est pas installé",
+   "bn": "Feishin ইনস্টল নেই",
+   "pt-BR": "Feishin não está instalado",
+   "ru": "Feishin не установлен",
+   "id": "Feishin belum terpasang"
+  },
   "File": {
    "zh-Hans": "文件",
    "hi": "फ़ाइल",
@@ -880,6 +891,17 @@
    "pt-BR": "De qualquer lugar",
    "ru": "Отовсюду",
    "id": "Dari mana saja"
+  },
+  "Get Feishin": {
+   "zh-Hans": "获取 Feishin",
+   "hi": "Feishin पाएँ",
+   "es": "Descargar Feishin",
+   "ar": "احصل على Feishin",
+   "fr": "Obtenir Feishin",
+   "bn": "Feishin নিন",
+   "pt-BR": "Baixar o Feishin",
+   "ru": "Скачать Feishin",
+   "id": "Dapatkan Feishin"
   },
   "Go to pill 1 to 9": {
    "zh-Hans": "前往第 1 至 9 个标签",
@@ -1508,6 +1530,17 @@
    "ru": "Открыть Claude",
    "id": "Buka Claude"
   },
+  "Open Feishin": {
+   "zh-Hans": "打开 Feishin",
+   "hi": "Feishin खोलें",
+   "es": "Abrir Feishin",
+   "ar": "فتح Feishin",
+   "fr": "Ouvrir Feishin",
+   "bn": "Feishin খুলুন",
+   "pt-BR": "Abrir o Feishin",
+   "ru": "Открыть Feishin",
+   "id": "Buka Feishin"
+  },
   "Open Settings": {
    "zh-Hans": "打开设置",
    "hi": "सेटिंग्स खोलें",
@@ -1628,17 +1661,6 @@
    "pt-BR": "Pagamento",
    "ru": "Платёж",
    "id": "Pembayaran"
-  },
-  "Permissions": {
-   "zh-Hans": "权限",
-   "hi": "अनुमतियाँ",
-   "es": "Permisos",
-   "ar": "الأذونات",
-   "fr": "Permissions",
-   "bn": "অনুমতি",
-   "pt-BR": "Permissões",
-   "ru": "Разрешения",
-   "id": "Izin"
   },
   "Pick a model above the chat box first.": {
    "zh-Hans": "请先在聊天框上方选择一个模型。",
@@ -2937,6 +2959,17 @@
    "pt-BR": "desconhecido",
    "ru": "неизвестно",
    "id": "tidak diketahui"
+  },
+  "{0} — open Feishin": {
+   "zh-Hans": "{0} — 打开 Feishin",
+   "hi": "{0} — Feishin खोलें",
+   "es": "{0} — abrir Feishin",
+   "ar": "{0} — فتح Feishin",
+   "fr": "{0} — ouvrir Feishin",
+   "bn": "{0} — Feishin খুলুন",
+   "pt-BR": "{0} — abrir o Feishin",
+   "ru": "{0} — открыть Feishin",
+   "id": "{0} — buka Feishin"
   },
   "{allowed} allowed, {denied} denied": {
    "zh-Hans": "允许 {allowed} 次，拒绝 {denied} 次",

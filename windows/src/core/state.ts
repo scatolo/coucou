@@ -13,6 +13,7 @@ import type { Bindings } from "./shortcuts";
 import { DEFAULT_OUTFIT, type Outfit } from "../mochi/wardrobe";
 import { pillColor } from "./pill-colors";
 import { Spotify, musicPlaying } from "./spotify";
+import { Feishin, feishinPlaying } from "./feishin";
 
 export type AgentSource = "claudeCode" | "n8n" | "agent";
 export type PillBadge = "approval" | "finished" | "error";
@@ -276,6 +277,16 @@ class AppState {
   /** Spotify plays on a declared pill: Mochi dances (Linux; never on Windows yet). */
   get spotifyPlaying(): boolean {
     return musicPlaying(Spotify.state, sanitizeDeclared(this.settings, this.os).activeIntegrations);
+  }
+
+  /** Feishin plays on a declared pill: Mochi dances. */
+  get feishinPlaying(): boolean {
+    return feishinPlaying(Feishin.state, sanitizeDeclared(this.settings, this.os).activeIntegrations);
+  }
+
+  /** Any declared music player is playing: Mochi dances. */
+  get musicPlaying(): boolean {
+    return this.spotifyPlaying || this.feishinPlaying;
   }
 
   get otherTasks(): AgentTask[] {

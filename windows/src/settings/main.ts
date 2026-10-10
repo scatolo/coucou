@@ -775,6 +775,8 @@ const INTEGRATIONS: IntegrationDef[] = [
     fields: [{ key: "calcom-api-key", label: N_("API key"), placeholder: "cal_…", secret: true }] },
   // Nothing to enter: Spotify is read over D-Bus (Linux only, see core/pills.ts).
   { id: "integration_spotify", name: "Spotify", color: "#1DB954", fields: [] },
+  // Nothing to enter: Feishin is read over D-Bus on Linux and WebSocket on Windows.
+  { id: "integration_feishin", name: "Feishin", color: "#3574FC", fields: [] },
 ];
 
 const MAX_ACTIVE = MAX_DECLARED;

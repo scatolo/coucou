@@ -1,7 +1,7 @@
 // The Feishin pill — media controls and state for Feishin.
 //
 // Linux: Feishin publishes standard MPRIS v2 on the session bus at
-// `org.mpris.MediaPlayer2.Feishin`. We block on the bus and wake on
+// `org.mpris.MediaPlayer2.feishin`. We block on the bus and wake on
 // PropertiesChanged, Seeked, and NameOwnerChanged signals.
 //
 // Windows: Feishin does not use D-Bus. State is driven through Feishin's
@@ -429,7 +429,7 @@ mod linux {
     use dbus::Message;
     use tauri::Emitter;
 
-    const BUS: &str = "org.mpris.MediaPlayer2.Feishin";
+    const BUS: &str = "org.mpris.MediaPlayer2.feishin";
     const PATH: &str = "/org/mpris/MediaPlayer2";
     const ROOT: &str = "org.mpris.MediaPlayer2";
     const PLAYER: &str = "org.mpris.MediaPlayer2.Player";
@@ -440,9 +440,9 @@ mod linux {
     const FLATPAK_ID: &str = "org.jeffvli.feishin";
 
     const RULES: [&str; 3] = [
-        "type='signal',sender='org.freedesktop.DBus',interface='org.freedesktop.DBus',member='NameOwnerChanged',arg0='org.mpris.MediaPlayer2.Feishin'",
-        "type='signal',sender='org.mpris.MediaPlayer2.Feishin',path='/org/mpris/MediaPlayer2',interface='org.freedesktop.DBus.Properties',member='PropertiesChanged'",
-        "type='signal',sender='org.mpris.MediaPlayer2.Feishin',path='/org/mpris/MediaPlayer2',interface='org.mpris.MediaPlayer2.Player',member='Seeked'",
+        "type='signal',sender='org.freedesktop.DBus',interface='org.freedesktop.DBus',member='NameOwnerChanged',arg0='org.mpris.MediaPlayer2.feishin'",
+        "type='signal',sender='org.mpris.MediaPlayer2.feishin',path='/org/mpris/MediaPlayer2',interface='org.freedesktop.DBus.Properties',member='PropertiesChanged'",
+        "type='signal',sender='org.mpris.MediaPlayer2.feishin',path='/org/mpris/MediaPlayer2',interface='org.mpris.MediaPlayer2.Player',member='Seeked'",
     ];
 
     struct Shared {

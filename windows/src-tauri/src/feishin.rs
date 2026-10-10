@@ -569,178 +569,168 @@ mod linux {
         s.active && s.generation == generation
     }
 
-    fn wake_listener(unique_name: &str) {
+    /// Any message to its unique name gets the listener off the bus.
+    fn wake_listener(name: &str) {
+        let Ok(msg) = Message::new_method_call(name, "/", "org.freedesktop.DBus.Peer", "Ping") else { return };
+        let mut msg = msg;
+        msg.set_no_reply(true);
         with_control(|c| {
-            let wake = Message::signal(&dbus::Path::new("/").unwrap(), &dbus::strings::Interface::new("fr.louisraille.Coucou").unwrap(), &dbus::strings::Member::new("Wake").unwrap())
-                .set_destination(dbus::strings::BusName::new(unique_name).unwrap());
-            let _ = c.send(wake);
+            let _ = c.channel().send(msg);
+            c.channel().flush();
             Ok(())
         });
     }
 
     fn listen(out: Out, generation: u64) {
-        let bus = match Connection::new_session() {
-            Ok(b) => b,
+        let conn = match Connection::new_session() {
+            Ok(c) => c,
             Err(err) => {
                 crate::log::line(format!("feishin: no session bus: {err}"));
                 return;
             }
         };
-        let unique = bus.unique_name().to_string();
         {
             let mut s = SHARED.lock().unwrap();
-            if s.generation != generation {
+            if !(s.active && s.generation == generation) {
                 return;
             }
-            s.listener = Some(unique);
+            s.listener = Some(conn.unique_name().to_string());
         }
-
         for rule in RULES {
-            if let Err(err) = bus.add_match(rule, |_| true) {
+            if let Err(err) = conn.add_match_no_cb(rule) {
                 crate::log::line(format!("feishin: match refused: {err}"));
-                return;
             }
         }
-
-        read_running(&bus, &out);
+        read_everything(&conn, &out, generation);
 
         while current(generation) {
-            match bus.process(IDLE_WAIT) {
-                Ok(true) => {}
-                Ok(false) => continue,
+            match conn.channel().blocking_pop_message(IDLE_WAIT) {
+                Ok(Some(msg)) => handle(&conn, &out, generation, &msg),
+                Ok(None) => {}
                 Err(err) => {
                     crate::log::line(format!("feishin: bus lost: {err}"));
                     break;
                 }
             }
+        }
+    }
 
-            while let Some(msg) = bus.channel().pop_message() {
-                if !current(generation) {
+    fn handle(conn: &Connection, out: &Out, generation: u64, msg: &Message) {
+        if msg.msg_type() != MessageType::Signal || !current(generation) {
+            return;
+        }
+        let interface = msg.interface().map(|i| i.to_string()).unwrap_or_default();
+        let member = msg.member().map(|m| m.to_string()).unwrap_or_default();
+        let sender = msg.sender().map(|s| s.to_string());
+
+        match (interface.as_str(), member.as_str()) {
+            (DBUS, "NameOwnerChanged") => {
+                let Ok((name, _old, new)) = msg.read3::<String, String, String>() else { return };
+                if name != BUS {
                     return;
                 }
-                handle_message(&bus, &out, &msg);
+                if new.is_empty() {
+                    let state = {
+                        let mut s = SHARED.lock().unwrap();
+                        s.owner = None;
+                        s.state.running = false;
+                        s.state.clear(now_ms());
+                        s.state.clone()
+                    };
+                    out.state(&state);
+                } else {
+                    read_everything(conn, out, generation);
+                }
             }
+            (PROPERTIES, "PropertiesChanged") => {
+                if !from_owner(sender.as_deref()) {
+                    return;
+                }
+                let Ok((iface, changed, invalidated)) = msg.read3::<String, PropMap, Vec<String>>() else { return };
+                if iface != PLAYER {
+                    return;
+                }
+                let mut props = props_of(&changed);
+                for name in invalidated {
+                    if let Some(v) = get_property(conn, &name) {
+                        props.push((name, v));
+                    }
+                }
+                apply_and_emit(conn, out, &props);
+            }
+            (PLAYER, "Seeked") => {
+                if !from_owner(sender.as_deref()) {
+                    return;
+                }
+                let Ok(us) = msg.read1::<i64>() else { return };
+                apply_and_emit(conn, out, &[("Position".into(), Value::Int(us))]);
+            }
+            _ => {}
         }
     }
 
-    fn handle_message(bus: &Connection, out: &Out, msg: &Message) {
-        if msg.msg_type() != MessageType::Signal {
-            return;
-        }
-        let (member, iface) = (msg.member(), msg.interface());
-        let (Some(member), Some(iface)) = (member.as_deref(), iface.as_deref()) else { return };
-
-        if iface == DBUS && member == "NameOwnerChanged" {
-            let mut it = msg.iter_init();
-            let (Some(name), Some(old), Some(new)) = (it.read::<&str>().ok(), it.read::<&str>().ok(), it.read::<&str>().ok()) else { return };
-            if name != BUS {
-                return;
-            }
-            if new.is_empty() {
-                let mut s = SHARED.lock().unwrap();
-                s.owner = None;
-                s.state.running = false;
-                s.state.clear(now_ms());
-                let state = s.state.clone();
-                drop(s);
-                out.state(&state);
-            } else if old.is_empty() {
-                SHARED.lock().unwrap().owner = Some(new.to_string());
-                read_all(bus, out);
-            }
-            return;
-        }
-
-        let sender = msg.sender().map(|s| s.to_string());
-        let known = SHARED.lock().unwrap().owner.clone();
-        if known.is_some() && known != sender {
-            return;
-        }
-
-        if iface == PROPERTIES && member == "PropertiesChanged" {
-            let mut it = msg.iter_init();
-            let Some(target) = it.read::<&str>().ok() else { return };
-            if target != PLAYER {
-                return;
-            }
-            let Some(map) = it.read::<PropMap>().ok() else { return };
-            let props = props_of(&map);
-            let mut s = SHARED.lock().unwrap();
-            let applied = s.state.apply(&props, now_ms());
-            let state = s.state.clone();
-            drop(s);
-            out.state(&state);
-            if applied.track_changed || applied.status_changed {
-                read_position(bus, out);
-            }
-            return;
-        }
-
-        if iface == PLAYER && member == "Seeked" {
-            let mut it = msg.iter_init();
-            if let Ok(us) = it.read::<i64>() {
-                let mut s = SHARED.lock().unwrap();
-                s.state.apply(&[("Position".into(), Value::Int(us))], now_ms());
-                let state = s.state.clone();
-                drop(s);
-                out.state(&state);
-            }
+    fn from_owner(sender: Option<&str>) -> bool {
+        let s = SHARED.lock().unwrap();
+        match (&s.owner, sender) {
+            (Some(owner), Some(sender)) => owner == sender,
+            (None, _) => true,
+            _ => false,
         }
     }
 
-    fn read_running(bus: &Connection, out: &Out) {
-        let owner = name_owner(bus);
-        let mut s = SHARED.lock().unwrap();
-        s.owner = owner.clone();
-        s.state.running = owner.is_some();
-        let running = s.state.running;
-        drop(s);
-        if running {
-            read_all(bus, out);
-        } else {
-            let state = SHARED.lock().unwrap().state.clone();
-            out.state(&state);
+    fn apply_and_emit(conn: &Connection, out: &Out, props: &[(String, Value)]) {
+        let applied = SHARED.lock().unwrap().state.apply(props, now_ms());
+        if (applied.status_changed || applied.track_changed) && !applied.position_set {
+            if let Some(position) = get_property(conn, "Position") {
+                SHARED.lock().unwrap().state.apply(&[("Position".into(), position)], now_ms());
+            }
         }
-    }
-
-    fn read_all(bus: &Connection, out: &Out) {
-        let (owner, props) = match query_all(bus) {
-            Ok(res) => res,
-            Err(_) => return,
-        };
-        let mut s = SHARED.lock().unwrap();
-        s.owner = Some(owner);
-        s.state.running = true;
-        s.state.installed = true;
-        s.state.apply(&props, now_ms());
-        let state = s.state.clone();
-        drop(s);
+        let state = SHARED.lock().unwrap().state.clone();
         out.state(&state);
-        read_position(bus, out);
     }
 
-    fn query_all(bus: &Connection) -> Result<(String, Vec<(String, Value)>), dbus::Error> {
-        let proxy = bus.with_proxy(BUS, PATH, CALL);
-        let owner = name_owner(bus).ok_or_else(|| dbus::Error::new_failed("Feishin not running"))?;
-        let map: PropMap = proxy.get_all(PLAYER)?;
-        Ok((owner, props_of(&map)))
+    fn get_property(conn: &Connection, name: &str) -> Option<Value> {
+        let proxy = conn.with_proxy(BUS, PATH, CALL);
+        let v: Box<dyn RefArg> = proxy.get(PLAYER, name).ok()?;
+        Some(value_of(&v))
     }
 
-    fn read_position(bus: &Connection, out: &Out) {
-        let proxy = bus.with_proxy(BUS, PATH, CALL);
-        let pos: Result<i64, _> = proxy.get(PLAYER, "Position");
-        if let Ok(us) = pos {
+    fn name_owner(conn: &Connection) -> Option<String> {
+        let proxy = conn.with_proxy(DBUS, "/org/freedesktop/DBus", CALL);
+        let (owner,): (String,) = proxy.method_call(DBUS, "GetNameOwner", (BUS,)).ok()?;
+        Some(owner)
+    }
+
+    fn read_everything(conn: &Connection, out: &Out, generation: u64) {
+        let owner = name_owner(conn);
+        let props = owner.as_ref().and_then(|_| {
+            let proxy = conn.with_proxy(BUS, PATH, CALL);
+            proxy.get_all(PLAYER).ok().map(|m| props_of(&m))
+        });
+        let state = {
             let mut s = SHARED.lock().unwrap();
-            s.state.apply(&[("Position".into(), Value::Int(us))], now_ms());
-            let state = s.state.clone();
-            drop(s);
-            out.state(&state);
+            if !(s.active && s.generation == generation) {
+                return;
+            }
+            s.owner = owner;
+            s.state.running = s.owner.is_some();
+            s.state.clear(now_ms());
+            if let Some(props) = props {
+                s.state.apply(&props, now_ms());
+            }
+            s.state.clone()
+        };
+        out.state(&state);
+        if state.running {
+            if let Some(position) = get_property(conn, "Position") {
+                let state = {
+                    let mut s = SHARED.lock().unwrap();
+                    s.state.apply(&[("Position".into(), position)], now_ms());
+                    s.state.clone()
+                };
+                out.state(&state);
+            }
         }
-    }
-
-    fn name_owner(bus: &Connection) -> Option<String> {
-        let proxy = bus.with_proxy(DBUS, "/", CALL);
-        proxy.method_call(DBUS, "GetNameOwner", (BUS,)).ok().and_then(|(owner,): (String,)| Some(owner))
     }
 
     fn with_control<F, R>(f: F) -> Option<R>
@@ -766,113 +756,101 @@ mod linux {
     }
 
     pub fn refresh(out: &Out) -> Option<PlayerState> {
-        let mut props_opt = None;
+        let generation = {
+            let s = SHARED.lock().unwrap();
+            if !s.active {
+                return None;
+            }
+            s.generation
+        };
         let read = with_control(|c| {
-            if name_owner(c).is_none() {
-                return Ok(false);
+            let owner = name_owner(c);
+            let props = match owner {
+                Some(_) => Some(props_of(&c.with_proxy(BUS, PATH, CALL).get_all(PLAYER)?)),
+                None => None,
+            };
+            Ok((owner, props))
+        });
+        let state = {
+            let mut s = SHARED.lock().unwrap();
+            if !(s.active && s.generation == generation) {
+                return None;
             }
-            let proxy = c.with_proxy(BUS, PATH, CALL);
-            let map: PropMap = proxy.get_all(PLAYER)?;
-            let mut p = props_of(&map);
-            if let Ok(pos) = proxy.get::<i64>(PLAYER, "Position") {
-                p.push(("Position".into(), Value::Int(pos)));
+            if let Some((owner, props)) = read {
+                s.owner = owner.clone();
+                s.state.running = owner.is_some();
+                s.state.installed = owner.is_some() || installed();
+                let now = now_ms();
+                match props {
+                    Some(props) => {
+                        s.state.apply(&props, now);
+                    }
+                    None => s.state.clear(now),
+                }
             }
-            props_opt = Some(p);
-            Ok(true)
-        })
-        .unwrap_or(false);
-
-        let mut s = SHARED.lock().unwrap();
-        s.state.installed = installed();
-        if read {
-            s.state.running = true;
-            if let Some(props) = props_opt {
-                s.state.apply(&props, now_ms());
-            }
-        } else {
-            s.state.running = false;
-            s.state.clear(now_ms());
-        }
-        let state = s.state.clone();
-        drop(s);
+            s.state.clone()
+        };
         out.state(&state);
         Some(state)
     }
 
     pub fn control(out: &Out, action: &str, value: Option<f64>) -> bool {
-        let now = now_ms();
-        {
-            let mut s = SHARED.lock().unwrap();
-            match action {
-                "playPause" => {
-                    let playing = !s.state.playing;
-                    s.state.playing = playing;
-                    s.state.anchor(s.state.position_at_time(now), now);
-                }
-                "shuffle" => {
-                    if let Some(v) = value {
-                        s.state.shuffle = v > 0.5;
-                    }
-                }
-                "repeat" => {
-                    if let Some(v) = value {
-                        s.state.repeat = v > 0.5;
-                    }
-                }
-                "volume" => {
-                    if let Some(v) = value {
-                        s.state.volume = v.round().clamp(0.0, 100.0) as i32;
-                    }
-                }
-                "seek" => {
-                    if let Some(v) = value {
-                        s.state.anchor(v, now);
-                    }
-                }
-                _ => {}
-            }
-            let state = s.state.clone();
-            drop(s);
-            out.state(&state);
+        let (active, state) = {
+            let s = SHARED.lock().unwrap();
+            (s.active && s.owner.is_some(), s.state.clone())
+        };
+        if !active {
+            return false;
         }
-
-        let run = with_control(|c| {
+        let v = value.unwrap_or(0.0);
+        let now = now_ms();
+        let done = with_control(|c| {
             let p = c.with_proxy(BUS, PATH, CALL);
             match action {
-                "playPause" => p.method_call::<(), _, _, _>(PLAYER, "PlayPause", ()),
-                "next" => p.method_call::<(), _, _, _>(PLAYER, "Next", ()),
-                "previous" => p.method_call::<(), _, _, _>(PLAYER, "Previous", ()),
+                "playPause" => p.method_call(PLAYER, "PlayPause", ()),
+                "next" => p.method_call(PLAYER, "Next", ()),
+                "previous" => p.method_call(PLAYER, "Previous", ()),
                 "seek" => {
-                    let target = value.unwrap_or(0.0).max(0.0);
-                    let target_us = (target * 1_000_000.0).round() as i64;
-                    let obj = {
-                        let s = SHARED.lock().unwrap();
-                        s.state.track.as_ref().map(|t| t.object_path.clone()).unwrap_or_default()
-                    };
-                    if let Ok(path) = dbus::Path::new(&obj) {
-                        p.method_call::<(), _, _, _>(PLAYER, "SetPosition", (path, target_us))
-                    } else {
-                        let cur_us = p.get::<i64>(PLAYER, "Position").unwrap_or(0);
-                        p.method_call::<(), _, _, _>(PLAYER, "Seek", (target_us - cur_us,))
+                    let Some(track) = state.track.as_ref() else { return Err(dbus::Error::new_failed("no track")) };
+                    let target = v.clamp(0.0, (track.duration - 1.0).max(0.0));
+                    let target_us = (target * 1_000_000.0) as i64;
+                    match dbus::Path::new(track.object_path.clone()) {
+                        Ok(path) => p.method_call(PLAYER, "SetPosition", (path, target_us)),
+                        Err(_) => {
+                            let from = (state.position_at_time(now) * 1_000_000.0) as i64;
+                            p.method_call(PLAYER, "Seek", (target_us - from,))
+                        }
                     }
                 }
-                "shuffle" => {
-                    let on = value.unwrap_or(0.0) > 0.5;
-                    p.set(PLAYER, "Shuffle", on)
-                }
-                "repeat" => {
-                    let on = value.unwrap_or(0.0) > 0.5;
-                    let status = if on { "Playlist" } else { "None" };
-                    p.set(PLAYER, "LoopStatus", status)
-                }
-                "volume" => {
-                    let v = value.unwrap_or(50.0).clamp(0.0, 100.0) / 100.0;
-                    p.set(PLAYER, "Volume", v)
-                }
-                _ => Ok(()),
+                "shuffle" => p.set(PLAYER, "Shuffle", v != 0.0),
+                "repeat" => p.set(PLAYER, "LoopStatus", if v != 0.0 { "Playlist" } else { "None" }),
+                "volume" => p.set(PLAYER, "Volume", (v / 100.0).clamp(0.0, 1.0)),
+                _ => Err(dbus::Error::new_failed("unknown action")),
             }
-        });
-        run.is_some()
+        })
+        .is_some();
+        if !done {
+            return false;
+        }
+        let optimistic: Option<(String, Value)> = match action {
+            "seek" => state.track.as_ref().map(|t| {
+                let target = v.clamp(0.0, (t.duration - 1.0).max(0.0));
+                ("Position".into(), Value::Int((target * 1_000_000.0) as i64))
+            }),
+            "shuffle" => Some(("Shuffle".into(), Value::Bool(v != 0.0))),
+            "repeat" => Some(("LoopStatus".into(), Value::Str(if v != 0.0 { "Playlist" } else { "None" }.into()))),
+            "volume" => Some(("Volume".into(), Value::Float((v / 100.0).clamp(0.0, 1.0)))),
+            _ => None,
+        };
+        if let Some(prop) = optimistic {
+            let state = {
+                let mut s = SHARED.lock().unwrap();
+                s.state.apply(&[prop], now_ms());
+                s.state.clone()
+            };
+            out.state(&state);
+        }
+        true
     }
 
     fn launcher() -> Option<Vec<std::ffi::OsString>> {

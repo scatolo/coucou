@@ -8,6 +8,12 @@ on:
     tags:
       - 'windows-v*'
   workflow_dispatch:
+    inputs:
+      publish_release:
+        description: 'Publish as GitHub Release?'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -113,12 +119,16 @@ jobs:
           retention-days: 3
 
       - name: Publish the release
-        if: env.PUBLISH == 'true' && startsWith(github.ref, 'refs/tags/windows-v')
+        if: (env.PUBLISH == 'true' && startsWith(github.ref, 'refs/tags/windows-v')) || (github.event_name == 'workflow_dispatch' && inputs.publish_release == true)
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           $v = "${{ steps.pack.outputs.version }}"
+          $tagName = "${{ github.ref_name }}"
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            $tagName = "windows-v$v"
+          }
           $notes = @"
           Coucou for Windows $v — Mochi at the top of your screen.
 
@@ -130,12 +140,20 @@ jobs:
           # whichever release was published last, and the site's Download for Mac
           # button points at /releases/latest. A Windows tag would silently send
           # Mac users to the .exe. The macOS `v*` releases own that slot.
-          gh release create "${{ github.ref_name }}" `
-            "release/Coucou-Windows-$v-setup.exe" `
-            "release/Coucou-Windows-$v.msi" `
-            --title "Coucou for Windows $v" `
-            --notes $notes `
-            --latest=false
+          $exists = gh release view "$tagName" 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload "$tagName" `
+              "release/Coucou-Windows-$v-setup.exe" `
+              "release/Coucou-Windows-$v.msi" `
+              --clobber
+          } else {
+            gh release create "$tagName" `
+              "release/Coucou-Windows-$v-setup.exe" `
+              "release/Coucou-Windows-$v.msi" `
+              --title "Coucou for Windows $v" `
+              --notes $notes `
+              --latest=false
+          }
 
       - name: Update the rolling windows-latest release
         if: env.PUBLISH == 'true' && startsWith(github.ref, 'refs/tags/windows-v')
